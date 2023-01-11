@@ -11,8 +11,13 @@ from pyspark import sql
 from pyspark.sql.functions import *
 
 
-PATH = '/user/s2334232/github.json'
+# PATH = '/user/s2334232/github.json'  # the whole dataset as one file (using partitions is preferred)
+PATH = '/user/s2334232/project'  #TODO to be used -> swap with the debug path
+PATH_DEBUG = '/user/s2334232/project/part-00037-4e9879c8-68e5-4a6b-aac0-f39462b39ade-c000.json'  # the smallest partition
 
 ss = sql.SparkSession.builder.getOrCreate()
-df1 = ss.read.json(PATH)
-df1.printSchema()  # DEBUG
+
+df1 = ss.read.json(PATH_DEBUG)
+df2 = df1.sample(.001)  # DEBUG: Take a small fraction of the dataset
+df2.printSchema()  # DEBUG
+print("number of data rows:", df2.count())  # DEBUG
