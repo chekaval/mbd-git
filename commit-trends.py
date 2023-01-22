@@ -13,14 +13,14 @@ from pyspark.sql.types import *
 
 
 def to_date(str_date):
-    if str_date is None:
-        print("NONE DATE")
-        print("NONE DATE")
-        print("NONE DATE")
-        print("NONE DATE")
-    print("str date:", str_date)
     date = datetime.strptime(str_date, "%Y-%m-%d")
     return date
+
+def to_count_dict(arr, users_count):
+    count_dict = {}
+    for e in arr:
+        count_dict[e] = count_dict.setdefault(e, 0.0) + 1.0/users_count  # TODO divide just once - perhaps better precision?
+    return count_dict
 
 # PATH = '/user/s2334232/github.json'  # the whole dataset as one file (using partitions is preferred)
 PATH = '/user/s2334232/project'  # TODO to be used -> swap with the debug path
@@ -33,8 +33,8 @@ commit_date_udf = udf(lambda arr: [e['generate_at'] for e in arr], ArrayType(Str
 extract_date_udf = udf(lambda arr: [e.split()[0] for e in arr], ArrayType(StringType()))
 compute_days_diff_udf = udf(lambda str_create_date, str_dates_arr: [(to_date(str_date) - to_date(str_create_date)).days
                                                                     for str_date in str_dates_arr], ArrayType(IntegerType()))
-compute_days_diff_debug_udf = udf(lambda str_create_date, str_dates_arr: [str_create_date + str_date
-                                                                          for str_date in str_dates_arr], ArrayType(StringType()))
+commit_days_dict_udf = udf(lambda days_arr, users_count: to_count_dict(days_arr, users_count),
+                           MapType(IntegerType(), DoubleType(), False))
 # commit_date_debug_udf = udf(lambda arr: [e['generate_at'] for e in arr], ArrayType(StringType()))
 
 ss = sql.SparkSession.builder.getOrCreate()
@@ -58,11 +58,26 @@ df8 = df7.withColumn('commit_dates', compute_days_diff_udf(col('created_at'), co
     .withColumnRenamed('commit_dates', 'commit_days_since')
 df9 = df8.withColumn('commit_days_since', sort_array(col('commit_days_since')))
 
-dftest = df7.withColumn('commit_dates', compute_days_diff_debug_udf(col('created_at'), col('commit_dates')))\
-    .withColumnRenamed('commit_dates', 'commit_days_since')
+# dftest = df7.withColumn('commit_dates', compute_days_diff_debug_udf(col('created_at'), col('commit_dates')))\
+#     .withColumnRenamed('commit_dates', 'commit_days_since')
 
-df9.printSchema()
-df9.show()
+# TODO make a dictionary of counts of commit_days_since (for each row?), then merge for all users, divide by count
+#  (make an average)
+df10 = df9.drop('created_at')
+users_count = df10.count()
+# df10.select(count(col('id'))).show()  # should be the same
+
+# df11 = df10.agg(flatten(collect_list('commit_days_since')).alias('commit_days_since'))
+# df12 = df11.withColumn('commit_days_since', commit_days_dict_udf(col('commit_days_since'), df10.count('commit_days_since')))
+
+df11 = df10.withColumn('commit_days_since', explode('commit_days_since')).groupBy('commit_days_since').count()
+df12 = df11.sort(col('commit_days_since').asc())
+
+df12.printSchema()
+df12.show()
+
+result = df12.collect()
+
 
 # def f(test):
 #     print(test)
