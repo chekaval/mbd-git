@@ -3,9 +3,14 @@ Title: GitHub Project
 [desc. of this file]
 Compute user commit trends over time (days since the user has joined).
 
+Command (using client mode to be able to store output files locally with Python):
+time spark-submit --master yarn --deploy-mode client --conf spark.dynamicAllocation.maxExecutors=10 commit-trends.py
+
 Authors: Maria Barac, Valeriia Chekanova, Dorien van Leeuwen, Hynek Noll
+Runtime: 10m0.805s
 """
 from datetime import datetime
+import pickle
 
 from pyspark import sql
 from pyspark.sql.functions import *
@@ -13,14 +18,14 @@ from pyspark.sql.types import *
 
 
 def to_date(str_date):
-    if str_date is None:
-        print("NONE DATE")
-        print("NONE DATE")
-        print("NONE DATE")
-        print("NONE DATE")
-    print("str date:", str_date)
     date = datetime.strptime(str_date, "%Y-%m-%d")
     return date
+
+def to_count_dict(arr):
+    count_dict = {}
+    for e in arr:
+        count_dict[e] = count_dict.setdefault(e, 0.0) + 1
+    return count_dict
 
 # PATH = '/user/s2334232/github.json'  # the whole dataset as one file (using partitions is preferred)
 PATH = '/user/s2334232/project'  # TODO to be used -> swap with the debug path
@@ -31,25 +36,22 @@ PATH_DEBUG = '/user/s2334232/project/part-00037-4e9879c8-68e5-4a6b-aac0-f39462b3
 #TODO this needs to take the e['generate_at'] from each inner array to combine them into an outer array..
 commit_date_udf = udf(lambda arr: [e['generate_at'] for e in arr], ArrayType(StringType()))
 extract_date_udf = udf(lambda arr: [e.split()[0] for e in arr], ArrayType(StringType()))
-compute_days_diff_udf = udf(lambda str_create_date, str_dates_arr: [(to_date(str_date) - to_date(str_create_date)).days
-                                                                    for str_date in str_dates_arr], ArrayType(IntegerType()))
-compute_days_diff_debug_udf = udf(lambda str_create_date, str_dates_arr: [str_create_date + str_date
-                                                                          for str_date in str_dates_arr], ArrayType(StringType()))
-# commit_date_debug_udf = udf(lambda arr: [e['generate_at'] for e in arr], ArrayType(StringType()))
+compute_days_diff_udf = udf(lambda str_create_date, str_dates_arr:
+                            [(to_date(str_date) - to_date(str_create_date)).days
+                             for str_date in str_dates_arr], ArrayType(IntegerType()))
+commit_days_dict_udf = udf(lambda days_arr: to_count_dict(days_arr),
+                           MapType(IntegerType(), DoubleType(), False))
 
 ss = sql.SparkSession.builder.getOrCreate()
 
-df1 = ss.read.json(PATH_DEBUG)
-filtered = df1.filter("type == 'User' AND is_suspicious != 'true'")  # TODO rename  # filtering out non-user and suspicious accounts
-df2 = filtered.sample(.001)  # DEBUG: Take a small fraction of the dataset
-df2.printSchema()  # DEBUG
-print("number of data rows:", df2.count())  # DEBUG
+df1 = ss.read.json(PATH)
+df2 = df1.filter("type == 'User' AND is_suspicious != 'true'")  # TODO rename  # filtering out non-user and suspicious accounts
+# df2 = df_sample.sample(.001)  # DEBUG: Take a small fraction of the dataset
+# df2.printSchema()  # DEBUG
+# TODO check login instead of id ...
 df3 = df2.select(col('id'), col('created_at'), col('commit_list'))
 df3.withColumn('First_Commit', df3.commit_list.getItem(0)).show()
 df4 = df3.filter(size(col('commit_list')) > 0)  # exclude users with no commits
-# df4 = df3.withColumn('Commit_Dates', commit_date_udf(col('commit_list')))
-# df5 = df4.select(col('id'), user_id_udf(col('commit_list')).alias('User_ID'),
-#                  commit_date_udf(col('commit_list')).alias('Commit_Date'))
 df5 = df4.withColumn('commit_list', commit_date_udf(col('commit_list')))\
          .withColumnRenamed('commit_list', 'commit_dates')
 df6 = df5.withColumn('commit_dates', extract_date_udf(col('commit_dates')))  # extract the dates (leave out times)
@@ -58,11 +60,27 @@ df8 = df7.withColumn('commit_dates', compute_days_diff_udf(col('created_at'), co
     .withColumnRenamed('commit_dates', 'commit_days_since')
 df9 = df8.withColumn('commit_days_since', sort_array(col('commit_days_since')))
 
-dftest = df7.withColumn('commit_dates', compute_days_diff_debug_udf(col('created_at'), col('commit_dates')))\
-    .withColumnRenamed('commit_dates', 'commit_days_since')
+# TODO make a dictionary of counts of commit_days_since (for each row?), then merge for all users, divide by count
+#  (make an average)
+df10 = df9.drop('created_at')
+users_count = df10.count()
+# df10.select(count(col('id'))).show()  # should be the same
 
-df9.printSchema()
-df9.show()
+# df11 = df10.agg(flatten(collect_list('commit_days_since')).alias('commit_days_since'))
+# df12 = df11.withColumn('commit_days_since', commit_days_dict_udf(col('commit_days_since'), df10.count('commit_days_since')))
+
+df11 = df10.withColumn('commit_days_since', explode('commit_days_since')).groupBy('commit_days_since').count()
+df12 = df11.sort(col('commit_days_since').asc())
+
+df12.printSchema()
+df12.show()
+
+result = df12.collect()
+
+with open("data/commit-trends-result", "wb") as fp:
+    pickle.dump(result, fp)
+with open("data/commit-trends-users-count", "wb") as fp:
+    pickle.dump(users_count, fp)
 
 # def f(test):
 #     print(test)
@@ -76,3 +94,7 @@ df9.show()
 #  but it might also be dated before the user account creation (local commits using git?)...
 #  / We can ofc have negative values on the X-axis ('-5 days since the account creation')
 
+# TODO run on the cluster, make a graph from the whole dataset, measure times, try different configs?
+
+
+#TODO we could compare most popular users' trends vs least popular / random sample / the rest...
