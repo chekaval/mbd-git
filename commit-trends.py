@@ -1,10 +1,15 @@
 """ //TODO to be reviewed and updated
 Title: GitHub Project
-[desc. of this file]
 Compute user commit trends over time (days since the user has joined).
 
 Command (using client mode to be able to store output files locally with Python):
 time spark-submit --master yarn --deploy-mode client --conf spark.dynamicAllocation.maxExecutors=20 commit-trends.py
+
+Dataset Notes:
+There are no accounts created in 2018.
+# ids == # logins
+53735 (distinct) users in the debug sample
+
 
 Authors: Maria Barac, Valeriia Chekanova, Dorien van Leeuwen, Hynek Noll
 Runtime: 10m0.805s
@@ -48,7 +53,6 @@ df1 = ss.read.json(PATH)
 df2 = df1.filter("type == 'User' AND is_suspicious != 'true'")  # filtering out non-user and suspicious accounts
 # df2 = df_sample.sample(.001)  # DEBUG: Take a small fraction of the dataset
 # df2.printSchema()  # DEBUG
-# TODO check login instead of id ...
 df3 = df2.select(col('id'), col('created_at'), col('commit_list'))
 df3.withColumn('First_Commit', df3.commit_list.getItem(0)).show()
 df4 = df3.filter(size(col('commit_list')) > 0)  # exclude users with no commits
@@ -57,19 +61,14 @@ df5 = df4.withColumn('commit_list', commit_date_udf(col('commit_list')))\
 df6 = df5.withColumn('commit_dates', extract_date_udf(col('commit_dates')))  # extract the dates (leave out times)
 df7 = df6.withColumn('created_at', udf(lambda date: date.split()[0])(col('created_at')))  # extract the date in the created_at column as well
 #TODO run with additional filters! - maxDate, minDate...
-# should work...
-df8 = df7.withColumn('commit_dates', expr('filter(commit_dates, e -> "2021-07-17" >= e AND e >= "2005-04-07")'))
-df8b = df8.filter(col('created_at') < "2015-01-01")  # only user accounts at least 3 years old (there are no accounts after 2018 ->
+df8 = df7.withColumn('commit_dates', expr('filter(commit_dates, e -> "2018-01-01" > e AND e >= "2005-04-07")'))
+df8b = df8.filter(col('created_at') < "2015-01-01")  # only user accounts at least 3 years old (there are no accounts in 2018 -> consider it the limit)
 df9 = df8b.filter(size(col('commit_dates')) > 0)  # exclude users with no commits once again
 
-# df7.withColumn('commit_dates', expr('filter(commit_dates, e -> e <= "2021-07-17")'))
+# no accounts created in 2018...
 # 2021-07-17 == dataset creation date
-
-# df7.withColumn('commit_dates', expr('filter(commit_dates, e -> e >= "2005-04-07")'))
 # 2005-04-07 == first git commit
-# sources: https://marc.info/?l=git&m=117254154130732
-# https://en.wikipedia.org/wiki/Git
-
+# source: https://marc.info/?l=git&m=117254154130732
 
 df10 = df9.withColumn('commit_dates', compute_days_diff_udf(col('created_at'), col('commit_dates')))\
     .withColumnRenamed('commit_dates', 'commit_days_since')
@@ -130,3 +129,5 @@ with open("commit-trends-out/commit-trends-users-count-" + now, "wb") as fp:
 #TODO explain the oscillation
 
 #TODO we could compare most popular users' trends vs least popular / random sample / the rest...
+
+# TODO the commits before account creation might be due to forking??

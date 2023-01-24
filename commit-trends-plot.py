@@ -4,14 +4,14 @@ from math import floor
 import matplotlib.pyplot as plt
 import matplotlib.scale as scale
 
-LIMIT_DAYS = False
-MIN_DAYS = 80
-MAX_DAYS = 110
+LIMIT_DAYS = True
+MIN_DAYS = 0
+MAX_DAYS = 365
 
 if __name__ == '__main__':
-    with open("commit-trends-out/commit-trends-result-2023-01-23-08-33-43", "rb") as fp:
+    with open("commit-trends-out/commit-trends-result-2023-01-23-13-22-32", "rb") as fp:
         result = pickle.load(fp)
-    with open("commit-trends-out/commit-trends-users-count-2023-01-23-08-33-43", "rb") as fp:
+    with open("commit-trends-out/commit-trends-users-count-2023-01-23-13-22-32", "rb") as fp:
         users_count = pickle.load(fp)
 
     days_since = [data[0] for data in result]
@@ -56,4 +56,4 @@ if __name__ == '__main__':
     plt.title("Average Number of Daily User Commits Since Account Creation")
     plt.xlabel("Days Since Account Creation")
     plt.ylabel("Average # of Commits")
-    plt.savefig("commit-trends-out/plot-log.png")
+    plt.savefig("commit-trends-out/plot-established-users-1-year.png")
