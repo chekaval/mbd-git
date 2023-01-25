@@ -1,5 +1,5 @@
-""" //TODO to be reviewed and updated
-Title: GitHub Project
+"""
+Title: GitHub Project - User Commit Trends
 Compute user commit trends over time (days since the user has joined).
 Also filter for most popular users.
 
@@ -22,10 +22,10 @@ In the debug sample:
 
 
 Authors: Maria Barac, Valeriia Chekanova, Dorien van Leeuwen, Hynek Noll
-Runtime: 10m0.805s | 4m46.308s (10% most popular users)
+Runtime: 10m0.805s
 """
-from datetime import datetime
 import pickle
+from datetime import datetime
 
 from pyspark import sql
 from pyspark.sql.functions import *
@@ -36,17 +36,17 @@ def to_date(str_date):
     date = datetime.strptime(str_date, "%Y-%m-%d")
     return date
 
+
 def to_count_dict(arr):
     count_dict = {}
     for e in arr:
         count_dict[e] = count_dict.setdefault(e, 0.0) + 1
     return count_dict
 
+
 # PATH = '/user/s2334232/github.json'  # the whole dataset as one file (using partitions is preferred)
-PATH = '/user/s2334232/project'  # TODO to be used -> swap with the debug path
+PATH = '/user/s2334232/project'  # the whole dataset as 50 partitions
 PATH_DEBUG = '/user/s2334232/project/part-00037-4e9879c8-68e5-4a6b-aac0-f39462b39ade-c000.json'  # the smallest partition
-# TODO Q: The partitions appear to be smaller in total (hdfs dfs -du -h -s /user/s2334232/project) -> 44.6 G x 50 G.
-#  Are the invalid rows already filtered out?
 
 commit_date_udf = udf(lambda arr: [e['generate_at'] for e in arr], ArrayType(StringType()))
 extract_date_udf = udf(lambda arr: [e.split()[0] for e in arr], ArrayType(StringType()))
@@ -60,14 +60,11 @@ ss = sql.SparkSession.builder.getOrCreate()
 
 df1 = ss.read.json(PATH)
 df2 = df1.filter("type == 'User' AND is_suspicious != 'true'")  # filtering out non-user and suspicious accounts
-# df3 = df2.select(col('id'), col('created_at'), col('commit_list'))
 df3 = df2.select(col('id'), col('created_at'), col('commit_list'), col('followers'))
 df4 = df3.filter(size(col('commit_list')) > 0)  # exclude users with no commits
-# filtered_dataset_size = df4.count()  # 2723276
-# filtered_dataset_size = 2723276
-# df4_popular = df4.sort(col('followers').desc()).limit(int(filtered_dataset_size/10))  # take 10% most popular users
+# filtered_dataset_size = df4.count()  # == 2723276
+# df4_popular = df4.sort(col('followers').desc()).limit(int(filtered_dataset_size/10))  # take 10% most popular users -> memory issues
 df4_popular = df4.filter(col('followers') >= 100)
-# df4_popular.show()
 df5 = df4_popular.drop(col('followers')).withColumn('commit_list', commit_date_udf(col('commit_list')))\
          .withColumnRenamed('commit_list', 'commit_dates')
 df6 = df5.withColumn('commit_dates', extract_date_udf(col('commit_dates')))  # extract the dates (leave out times)
@@ -86,42 +83,12 @@ df11 = df10.withColumn('commit_days_since', sort_array(col('commit_days_since'))
 
 df12 = df11.drop('created_at')
 users_count = df12.count()
-df10.select(count(col('id'))).show()  # should be the same
-
-# df11 = df10.agg(flatten(collect_list('commit_days_since')).alias('commit_days_since'))
-# df12 = df11.withColumn('commit_days_since', commit_days_dict_udf(col('commit_days_since'), df10.count('commit_days_since')))
+# df10.select(count(col('id'))).show()  # should be the same as users_count
 
 df13 = df12.withColumn('commit_days_since', explode('commit_days_since')).groupBy('commit_days_since').count()
 df14 = df13.sort(col('commit_days_since').asc())
 
-
-# DEBUG: Exploring the dataset
-explore = df1.select('id', col('commit_list')).select('id', col('commit_list')['author_id'].alias('author_id'), col('commit_list')['committer_id'].alias('committer_id'))
-explore.filter(expr('array_contains(author_id, id)')).show()
-explore.filter(expr('array_contains(committer_id, id)')).count()
-
-explore2 = df1.select('id', col('commit_list')).select('id', col('commit_list')['commit_at'].alias('commit_at'), col('commit_list')['generate_at'].alias('generate_at'))
-explore2.withColumn('arr_diff', array_except('generate_at', 'commit_at')).where(size('arr_diff') > 0).show()
-explore2.withColumn('arr_diff', array_except('commit_at', 'generate_at')).where(size('arr_diff') > 0).show()
-# df14.printSchema()
-# df14.show()
-# DEBUG END
-
 result = df14.collect()
-
-# DEBUG
-df7.select(min('created_at')).show()  # the oldest account creation = 2007-10-20
-df7.select(max('created_at')).show()  # the newest account creation = 2017-12-31
-
-dfmindates = df7.select(array_min('commit_dates').alias('commit_dates'))
-dfmaxdates = df7.select(array_max('commit_dates').alias('commit_dates'))
-
-dfmindates.select(min('commit_dates')).show()  # the oldest commit date = 1970-01-01
-dfmaxdates.select(max('commit_dates')).show()  # the "newest" commit date = 6912-01-03
-
-dfmindates.sort(col('commit_dates').asc()).show()  # 20 oldest commit dates
-dfmaxdates.sort(col('commit_dates').desc()).show()  # 20 newest commit dates
-# DEBUG END
 
 # store the outputs
 now = datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
@@ -131,22 +98,25 @@ with open("commit-trends-out/commit-trends-result-most-popular-" + now, "wb") as
 with open("commit-trends-out/commit-trends-users-count-most-popular-" + now, "wb") as fp:
     pickle.dump(users_count, fp)
 
-# def f(test):
-#     print(test)
-# df3.foreach(f).show()
 
-# TODO take 'generate_at' of each commit (when was the commit created)
-#  we can do both days and years since the user joined...
-
-# TODO should we use the generate_at or commit_at field?? -- the first one should denote more accurately when was the work done,
-#  (and it is ) but it might also be dated before the user account creation (local commits using git?)...
-#  / We can ofc have negative values on the X-axis ('-5 days since the account creation')
-
-# TODO run on the cluster, make a graph from the whole dataset, measure times, try different configs?
-
-
-#TODO explain the oscillation
-
-#TODO we could compare most popular users' trends vs least popular / random sample / the rest...
-
-# TODO the commits before account creation might be due to forking??
+# DEBUG: Exploring the dataset
+# explore = df1.select('id', col('commit_list')).select('id', col('commit_list')['author_id'].alias('author_id'), col('commit_list')['committer_id'].alias('committer_id'))
+# explore.filter(expr('array_contains(author_id, id)')).show()
+# explore.filter(expr('array_contains(committer_id, id)')).count()
+#
+# explore2 = df1.select('id', col('commit_list')).select('id', col('commit_list')['commit_at'].alias('commit_at'), col('commit_list')['generate_at'].alias('generate_at'))
+# explore2.withColumn('arr_diff', array_except('generate_at', 'commit_at')).where(size('arr_diff') > 0).show()
+# explore2.withColumn('arr_diff', array_except('commit_at', 'generate_at')).where(size('arr_diff') > 0).show()
+#
+# df7.select(min('created_at')).show()  # the oldest account creation = 2007-10-20
+# df7.select(max('created_at')).show()  # the newest account creation = 2017-12-31
+#
+# dfmindates = df7.select(array_min('commit_dates').alias('commit_dates'))
+# dfmaxdates = df7.select(array_max('commit_dates').alias('commit_dates'))
+#
+# dfmindates.select(min('commit_dates')).show()  # the oldest commit date = 1970-01-01
+# dfmaxdates.select(max('commit_dates')).show()  # the "newest" commit date = 6912-01-03
+#
+# dfmindates.sort(col('commit_dates').asc()).show()  # 20 oldest commit dates
+# dfmaxdates.sort(col('commit_dates').desc()).show()  # 20 newest commit dates
+# DEBUG END
