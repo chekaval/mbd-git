@@ -63,8 +63,11 @@ df2 = df1.filter("type == 'User' AND is_suspicious != 'true'")  # filtering out 
 # df3 = df2.select(col('id'), col('created_at'), col('commit_list'))
 df3 = df2.select(col('id'), col('created_at'), col('commit_list'), col('followers'))
 df4 = df3.filter(size(col('commit_list')) > 0)  # exclude users with no commits
-filtered_dataset_size = df4.count()
-df4_popular = df4.sort(col('followers').desc()).limit(int(filtered_dataset_size/10))  # take 10% most popular users
+# filtered_dataset_size = df4.count()  # 2723276
+# filtered_dataset_size = 2723276
+# df4_popular = df4.sort(col('followers').desc()).limit(int(filtered_dataset_size/10))  # take 10% most popular users
+df4_popular = df4.filter(col('followers') >= 100)
+# df4_popular.show()
 df5 = df4_popular.drop(col('followers')).withColumn('commit_list', commit_date_udf(col('commit_list')))\
          .withColumnRenamed('commit_list', 'commit_dates')
 df6 = df5.withColumn('commit_dates', extract_date_udf(col('commit_dates')))  # extract the dates (leave out times)
