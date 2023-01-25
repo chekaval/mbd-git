@@ -62,33 +62,31 @@ df1 = ss.read.json(PATH)
 df2 = df1.filter("type == 'User' AND is_suspicious != 'true'")  # filtering out non-user and suspicious accounts
 df3 = df2.select(col('id'), col('created_at'), col('commit_list'), col('followers'))
 df4 = df3.filter(size(col('commit_list')) > 0)  # exclude users with no commits
-# filtered_dataset_size = df4.count()  # == 2723276
-# df4_popular = df4.sort(col('followers').desc()).limit(int(filtered_dataset_size/10))  # take 10% most popular users -> memory issues
-df4_popular = df4.filter(col('followers') >= 100)
+df4_popular = df4.filter(col('followers') >= 100)  # filter for users with at least 100 followers (comment out for all)
 df5 = df4_popular.drop(col('followers')).withColumn('commit_list', commit_date_udf(col('commit_list')))\
          .withColumnRenamed('commit_list', 'commit_dates')
 df6 = df5.withColumn('commit_dates', extract_date_udf(col('commit_dates')))  # extract the dates (leave out times)
 df7 = df6.withColumn('created_at', udf(lambda date: date.split()[0])(col('created_at')))  # extract the date in the created_at column as well
 df8 = df7.withColumn('commit_dates', expr('filter(commit_dates, e -> "2018-01-01" > e AND e >= "2005-04-07")'))  # limit the range of commit dates
-df8b = df8.filter(col('created_at') < "2015-01-01")  # only user accounts at least 3 years old (there are no accounts in 2018 -> consider it the limit)
-df9 = df8b.filter(size(col('commit_dates')) > 0)  # exclude users with no commits (all commits filtered) once again
+df9 = df8.filter(col('created_at') < "2015-01-01")  # only user accounts at least 3 years old (there are no accounts in 2018 -> consider it the limit)
+df10 = df9.filter(size(col('commit_dates')) > 0)  # exclude users with no commits (all commits filtered) once again
 
 # no accounts created in 2018...
 # 2021-07-17 == dataset creation date
 # 2005-04-07 == first git commit; source: https://marc.info/?l=git&m=117254154130732
 
-df10 = df9.withColumn('commit_dates', compute_days_diff_udf(col('created_at'), col('commit_dates')))\
+df11 = df10.withColumn('commit_dates', compute_days_diff_udf(col('created_at'), col('commit_dates')))\
     .withColumnRenamed('commit_dates', 'commit_days_since')
-df11 = df10.withColumn('commit_days_since', sort_array(col('commit_days_since')))
+df12 = df11.withColumn('commit_days_since', sort_array(col('commit_days_since')))
 
-df12 = df11.drop('created_at')
-users_count = df12.count()
+df13 = df12.drop('created_at')
+users_count = df13.count()
 # df10.select(count(col('id'))).show()  # should be the same as users_count
 
-df13 = df12.withColumn('commit_days_since', explode('commit_days_since')).groupBy('commit_days_since').count()
-df14 = df13.sort(col('commit_days_since').asc())
+df14 = df13.withColumn('commit_days_since', explode('commit_days_since')).groupBy('commit_days_since').count()
+df15 = df14.sort(col('commit_days_since').asc())
 
-result = df14.collect()
+result = df15.collect()
 
 # store the outputs
 now = datetime.now().strftime("%Y-%m-%d-%H-%M-%S")

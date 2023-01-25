@@ -1,3 +1,8 @@
+"""
+Title: GitHub Project - Script to Parse Cities from CSV
+
+Authors: Maria Barac, Valeriia Chekanova, Dorien van Leeuwen, Hynek Noll
+"""
 import csv
 import re
 

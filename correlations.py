@@ -1,3 +1,9 @@
+"""
+Title: GitHub Project - Correlations between Influence Metrics
+
+Authors: Maria Barac, Valeriia Chekanova, Dorien van Leeuwen, Hynek Noll
+"""
+
 from pyspark import sql
 from pyspark.sql.functions import *
 

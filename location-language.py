@@ -1,3 +1,8 @@
+"""
+Title: GitHub Project - Correlation between User Location and Programming Language They Use
+
+Authors: Maria Barac, Valeriia Chekanova, Dorien van Leeuwen, Hynek Noll
+"""
 from pyspark import sql
 from pyspark.sql import Window
 from pyspark.sql.functions import *
@@ -14,8 +19,8 @@ from pyspark.sql.functions import *
 import json
 import re
 
-# PATH_DEBUG = '/user/s2334232/github.json'  # the whole dataset as one file (using partitions is preferred)
 PATH_CITIES = '/home/s3094650/cities.json'
+PATH = '/user/s2334232/project'
 PATH_DEBUG = '/user/s2334232/project/part-00037-4e9879c8-68e5-4a6b-aac0-f39462b39ade-c000.json'  # the smallest partition
 
 cities = {'les', 'saint', 'phumi', 'goth', 'hacienda', 'al', 'qal`eh-ye', 'haji', 'south', 'dar', 'oulad', 'villa',
@@ -58,7 +63,7 @@ ss = sql.SparkSession.builder.getOrCreate()
 parse_string_udf = udf(lambda str_location: normalize_location(str_location), StringType())
 replace_city_with_country_udf = udf(lambda str_location: replace_city_with_country(str_location), StringType())
 
-df1 = ss.read.json(PATH_DEBUG)
+df1 = ss.read.json(PATH)
 df2 = df1.filter("type == 'User' AND is_suspicious != 'true'")
 df3 = df2.select(col('location').alias('location'),
                  explode((col('repo_list')['language'])).alias('language'),

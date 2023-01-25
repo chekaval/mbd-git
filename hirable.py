@@ -1,3 +1,8 @@
+"""
+Title: GitHub Project - Relation between Hirable Status and the Number of Public Repositories
+
+Authors: Maria Barac, Valeriia Chekanova, Dorien van Leeuwen, Hynek Noll
+"""
 from pyspark import sql
 from pyspark.sql.functions import *
 

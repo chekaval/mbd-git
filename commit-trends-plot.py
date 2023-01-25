@@ -1,3 +1,8 @@
+"""
+Title: GitHub Project - User Commit Trends Plotting Script
+
+Authors: Maria Barac, Valeriia Chekanova, Dorien van Leeuwen, Hynek Noll
+"""
 import pickle
 
 import matplotlib.pyplot as plt

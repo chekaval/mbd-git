@@ -1,3 +1,8 @@
+"""
+Title: GitHub Project - Programming Languages Used by All and Most Followed Users
+
+Authors: Maria Barac, Valeriia Chekanova, Dorien van Leeuwen, Hynek Noll
+"""
 from pyspark import sql
 from pyspark.sql.functions import *
 

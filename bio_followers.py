@@ -1,3 +1,8 @@
+"""
+Title: GitHub Project - Correlation between Bio Length and the Number of Followers
+
+Authors: Maria Barac, Valeriia Chekanova, Dorien van Leeuwen, Hynek Noll
+"""
 from pyspark import sql
 from pyspark.sql.functions import *
 
